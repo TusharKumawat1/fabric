@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as fabric from "fabric";
+import { clipPathArray, ClipPathType } from "./shapesPreset";
 
 const CanvasEditor: React.FC = () => {
   const canvasRef = useRef<fabric.Canvas | null>(null);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null); // State for selected shape
+  const [shapes, setShapes] = useState<ClipPathType | null>(null);
 
   const [text, setText] = useState("Editable Text");
 
@@ -55,15 +58,13 @@ const CanvasEditor: React.FC = () => {
         };
       });
     };
- 
-  
     const addElements = async () => {
       try {
         // Add image element and apply clip-path
         const img = await loadImage(elements[0].url!); // Ensure correct typing for img
         img.set({ left: elements[0].left, top: elements[0].top });
-        
-      
+
+
         canvas.add(img);
 
         // Add editable text element
@@ -154,10 +155,81 @@ const CanvasEditor: React.FC = () => {
     setText(event.target.value);
   };
 
+  useEffect(() => {
+    if (!shapes || !canvasRef.current) return;
+  
+    const { clipPath } = shapes;
+
+    let shapeObject;
+  
+    if (clipPath.startsWith("circle")) {
+      // Handle circle clip-path
+      const match = /circle\((\d+)% at (\d+)% (\d+)%\)/.exec(clipPath);
+      if (match) {
+        const radius = (parseInt(match[1]) / 100) * 200;
+        const left = (parseInt(match[2]) / 100) * 200;
+        const top = (parseInt(match[3]) / 100) * 200;
+  
+        shapeObject = new fabric.Circle({
+          left,
+          top,
+          radius,
+          fill: "rgba(0, 0, 0, 0.3)",
+        });
+      }
+    } else if (clipPath.startsWith("polygon")) {
+      // Handle polygon clip-path
+      const points = clipPath
+        .replace("polygon(", "")
+        .replace(")", "")
+        .split(", ")
+        .map((point) => {
+          const [x, y] = point.trim().split(" ");
+          return {
+            x: (parseFloat(x) / 100) * 200, // Scale to canvas size
+            y: (parseFloat(y) / 100) * 200,
+          };
+        });
+  
+      shapeObject = new fabric.Polygon(points, {
+        left: 150,
+        top: 150,
+        fill: "#000000",
+      });
+    } else if (clipPath.startsWith("inset")) {
+      // Handle inset clip-path
+      const match = /inset\((\d+)% (\d+)% (\d+)% (\d+)%\)/.exec(clipPath);
+      if (match) {
+        const top = (parseInt(match[1]) / 100) * 200;
+        const right = (parseInt(match[2]) / 100) * 200;
+        const bottom = (parseInt(match[3]) / 100) * 200;
+        const left = (parseInt(match[4]) / 100) * 200;
+  
+        shapeObject = new fabric.Rect({
+          left,
+          top,
+          width: 200 - left - right,
+          height: 200 - top - bottom,
+          fill: "rgba(0, 0, 0, 0.3)",
+        });
+      }
+    }
+  
+    if (shapeObject) {
+      canvasRef.current.add(shapeObject);
+      canvasRef.current.renderAll();
+    }
+  }, [shapes]);
+  
+  const handleShapeClick = (shape: ClipPathType) => {
+    setShapes(shape);
+    setSelectedShapeId(shape.shape);
+  };
+  
   return (
     <div className="flex flex-col items-center">
       <h1 className="text-xl font-bold mb-4">Fabric.js Canvas Editor</h1>
-      
+
       {/* Input for editable text */}
       <button
         onClick={addRandomShape}
@@ -172,7 +244,61 @@ const CanvasEditor: React.FC = () => {
         className="mb-4 p-2 border rounded"
         placeholder="Edit text"
       />
-      
+      {/* <div
+        className="grid w-full gap-2 justify-center items-center overflow-y-auto hideScrollbar"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+        }}
+      >
+        {clipPathArray.map((shape: ClipPathType, index: number) => (
+          <div
+            key={index}
+            className={`w-[100px] h-[100px] p-3 rounded-md cursor-pointer ${selectedShapeId === shape.shape
+              ? "border-[2px] border-black"
+              : "border-[1px] border-[#DAC0A3]"
+              } flex justify-center items-center`}
+            style={{
+              minWidth: "100px",
+              minHeight: "100px",
+              maxWidth: "150px",
+              maxHeight: "150px",
+            }}
+            onClick={() => handleShapeClick(shape)}
+          >
+            <div
+              className="w-full h-full"
+              style={{
+                clipPath: shape.clipPath,
+                backgroundColor: "rgba(0, 0, 0, 0.3)",
+                border: "1px solid transparent",
+              }}
+            ></div>
+          </div>
+        ))}
+      </div> */}
+      <div
+        className="grid-container"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+        }}
+      >
+        {clipPathArray.map((shape: ClipPathType, index: number) => (
+          <div
+            key={index}
+            className={`grid-item ${selectedShapeId === shape.shape ? "border-active" : "border-inactive"
+              }`}
+            onClick={() => handleShapeClick(shape)}
+          >
+            <div
+              className="inner-div"
+              style={{
+                clipPath: shape.clipPath,
+              }}
+            ></div>
+          </div>
+        ))}
+      </div>
+
       <canvas id="canvas" className="border border-gray-400"></canvas>
     </div>
   );
